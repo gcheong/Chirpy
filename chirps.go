@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -19,10 +20,39 @@ type Chirp struct {
 	Body      string    `json:"body"`
 }
 
+func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received request to get chirp: %s", r.URL.Path)
+	// Extract chirpID from the URL path
+	chirpIDStr := r.PathValue("chirpID")
+	log.Printf("Extracted chirpID: %s", chirpIDStr)
+	chirpID, err := uuid.Parse(chirpIDStr)
+
+	log.Printf("Parsed chirpID: %s", chirpIDStr)
+
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid chirp ID", err)
+		return
+	}
+
+	chirp, err := cfg.dbQueries.GetChirpByID(r.Context(), chirpID)
+	if err != nil {
+		respondWithError(w, 404., "Couldn't retrieve chirp", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, Chirp{
+		ID:        chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		UserID:    chirp.UserID,
+		Body:      chirp.Body,
+	})
+}
+
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
 	chirps, err := cfg.dbQueries.GetAllChirps(r.Context())
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps", err)
+		respondWithError(w, http.StatusNotFound, "Couldn't retrieve chirps", err)
 		return
 	}
 
