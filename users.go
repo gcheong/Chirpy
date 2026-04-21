@@ -76,7 +76,8 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 
 	type response struct {
 		User
-		Token string `json:"token"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -85,36 +86,33 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&e)
 
 	if err != nil {
-		log.Printf("Error decoding parameters: %s", err)
-		w.WriteHeader(500)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
 		return
 	}
 
 	user, err := cfg.dbQueries.GetUserByEmail(r.Context(), e.Email)
 	if err != nil {
-		log.Printf("Error getting user by email: %s", err)
-		w.WriteHeader(500)
+		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", err)
 		return
 	}
 
-	valid, err := auth.CheckPasswordHash(e.Password, user.HashedPassword)
+	match, err := auth.CheckPasswordHash(e.Password, user.HashedPassword)
+	if err != nil || !match {
+		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", err)
+		return
+	}
+
+	token, err := auth.MakeJWT(user.ID, cfg.secret, time.Hour)
 	if err != nil {
-		log.Printf("Error verifying password: %s", err)
-		w.WriteHeader(401)
-		return
-	}
-	if !valid {
-		log.Printf("Invalid password for user: %s", e.Email)
-		w.WriteHeader(401)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create access token", err)
 		return
 	}
 
-	// token, err := auth.GenerateJWT(user.ID.String())
-	// if err != nil {
-	// 	log.Printf("Error generating JWT: %s", err)
-	// 	w.WriteHeader(500)
-	// 	return
-	// }
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create refresh token", err)
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, response{
 		User: User{
@@ -123,6 +121,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt: user.UpdatedAt,
 			Email:     user.Email,
 		},
-		// Token: token,
+		Token:        token,
+		RefreshToken: refreshToken,
 	})
 }
