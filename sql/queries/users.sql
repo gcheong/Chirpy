@@ -9,3 +9,8 @@ SELECT * FROM users WHERE email = $1;
 
 -- name: DeleteUsers :exec
 DELETE FROM users;
+
+-- name: UpdateUser :one
+UPDATE users SET email = $2, hashed_password = $3, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
