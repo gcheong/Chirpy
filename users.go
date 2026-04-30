@@ -108,11 +108,13 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	refreshToken, err := auth.MakeRefreshToken()
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't create refresh token", err)
-		return
-	}
+	refreshToken := auth.MakeRefreshToken()
+
+	_, err = cfg.dbQueries.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+		Token:  refreshToken,
+		UserID: user.ID,
+		ExpiresAt: time.Now().UTC().Add(time.Hour * 24 * 60),
+	})
 
 	respondWithJSON(w, http.StatusOK, response{
 		User: User{
@@ -125,3 +127,4 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		RefreshToken: refreshToken,
 	})
 }
+
