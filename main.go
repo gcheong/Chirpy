@@ -18,6 +18,8 @@ type apiConfig struct {
 	dbQueries      *database.Queries
 	platform       string
 	secret         string
+	polka_key	   string
+
 }
 
 func (cfg *apiConfig) handlerMetrics(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +65,7 @@ func main() {
 		dbQueries:      database.New(db),
 		platform:       os.Getenv("PLATFORM"),
 		secret:         os.Getenv("SECRET"),
+		polka_key:		os.Getenv("POLKA_KEY"),
 	}
 
 	mux := http.NewServeMux()
@@ -81,6 +84,9 @@ func main() {
 	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
 	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
 	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerWebhook)
+
 
 	srv := &http.Server{
 
