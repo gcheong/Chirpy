@@ -122,6 +122,62 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request){
+	// Extract chirpID from the URL path
+	chirpIDStr := r.PathValue("chirpID")
+	chirpID, err := uuid.Parse(chirpIDStr)
+
+	//Check header token for correct authorization
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Missing or invalid Authorization header", err)
+		return
+	}
+
+	// Get the user id for the passed in token
+	userID, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token", err)
+		return
+	}
+
+	//Check if user requesting the delete actually created the chirp
+	chirp, err := cfg.dbQueries.GetChirpByID(r.Context(), chirpID)
+	
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not delete chirp",err)
+		return
+	}
+
+	if chirp.UserID != userID {
+		respondWithError(w, http.StatusForbidden, "Forbidden",err)
+		return
+	}
+
+	count, err := cfg.dbQueries.GetChirpForUserByID(r.Context(), database.GetChirpForUserByIDParams{
+		ID: chirpID,
+		UserID: userID,
+	})
+
+	if count == 0 {
+		respondWithError(w, http.StatusNotFound,"Chirp not found", err)
+		return
+	}
+
+	err = cfg.dbQueries.DeleteChirpForUserByID(r.Context(), database.DeleteChirpForUserByIDParams{
+		ID: chirpID,
+		UserID: userID,
+	})
+
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not delete chirp",err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusNoContent, "")
+	return
+}
+
 func validateChirp(body string) (string, error) {
 	const maxChirpLength = 140
 	if len(body) > maxChirpLength {
@@ -148,3 +204,4 @@ func getCleanedBody(body string, badWords map[string]struct{}) string {
 	cleaned := strings.Join(words, " ")
 	return cleaned
 }
+
