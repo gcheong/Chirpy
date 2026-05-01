@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"sort"
 
 	"github.com/gcheong/Chirpy/internal/auth"
 	"github.com/gcheong/Chirpy/internal/database"
@@ -51,11 +52,28 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := cfg.dbQueries.GetAllChirps(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "Couldn't retrieve chirps", err)
-		return
+
+
+	var chirps []database.Chirp
+	var err error
+	var authorId uuid.UUID
+	authorIdStr := r.URL.Query().Get("author_id")
+
+	if authorIdStr == "" {
+		chirps, err = cfg.dbQueries.GetAllChirps(r.Context())
+	} else {
+		authorId, err = uuid.Parse(authorIdStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid author id", err)
+			return
+		}
+		chirps, err = cfg.dbQueries.GetChirpsForUser(r.Context(), authorId)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "Couldn't retrieve chirps", err)
+			return
+		}
 	}
+	
 
 	var chirpList []Chirp
 	for _, chirp := range chirps {
@@ -68,8 +86,13 @@ func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request
 		})
 	}
 
-	respondWithJSON(w, http.StatusOK, chirpList)
+	sortType :=  r.URL.Query().Get("sort")
 
+	if sortType == "desc" {
+		sort.Slice(chirpList, func(i,j int) bool { return chirpList[j].CreatedAt.Before(chirpList[i].CreatedAt) })
+	}
+
+	respondWithJSON(w, http.StatusOK, chirpList)	
 }
 
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +154,7 @@ func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Invalid chirp ID", err)
 		return
 	}
-	
+
 	//Check header token for correct authorization
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
